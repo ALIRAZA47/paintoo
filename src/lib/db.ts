@@ -9,10 +9,22 @@ import fs from "node:fs";
  *   - local-only dev with no Turso account: defaults to a local file under
  *     ./data/paintoo.db (libsql falls back to its native SQLite for file: URLs)
  */
+const TURSO_URL = process.env.TURSO_DATABASE_URL || "";
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || "";
+// Vercel sets VERCEL=1 in every runtime; same for Netlify/Cloudflare via their
+// own flags. We refuse to fall back to a file URL on serverless because the
+// filesystem is read-only and crashes will look like opaque "function did not
+// return" errors in the platform's log.
+const ON_SERVERLESS =
+  !!process.env.VERCEL ||
+  !!process.env.NETLIFY ||
+  !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 const DB_URL =
-  process.env.TURSO_DATABASE_URL ||
-  `file:${path.resolve(process.cwd(), "data", "paintoo.db")}`;
-const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
+  TURSO_URL ||
+  (ON_SERVERLESS
+    ? ""
+    : `file:${path.resolve(process.cwd(), "data", "paintoo.db")}`);
 
 declare global {
   // eslint-disable-next-line no-var
@@ -26,15 +38,29 @@ function ensureLocalDir(url: string) {
   if (!url.startsWith("file:")) return;
   const filePath = url.slice("file:".length);
   const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `Could not create local SQLite directory ${dir}: ${(err as Error).message}. ` +
+        `If you're running on a read-only host (Vercel, Lambda, etc.), set ` +
+        `TURSO_DATABASE_URL + TURSO_AUTH_TOKEN instead of falling back to a file.`,
+    );
+  }
 }
 
 function open(): Client {
   if (!global.__paintooDb) {
+    if (!DB_URL) {
+      throw new Error(
+        "Database is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN " +
+          "(see .env.example).",
+      );
+    }
     ensureLocalDir(DB_URL);
     global.__paintooDb = createClient({
       url: DB_URL,
-      ...(DB_TOKEN ? { authToken: DB_TOKEN } : {}),
+      ...(TURSO_TOKEN ? { authToken: TURSO_TOKEN } : {}),
     });
   }
   return global.__paintooDb;
