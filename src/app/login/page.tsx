@@ -9,8 +9,8 @@ export default async function LoginPage({
 }) {
   const sp = await searchParams;
   return (
-    <div className="min-h-screen w-full grid place-items-center bg-[color:var(--bg-deep)]">
-      <div className="w-[min(380px,92vw)] rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] shadow-soft p-8">
+    <div className="h-[100dvh] w-full grid place-items-center bg-[color:var(--bg-deep)] px-4">
+      <div className="w-[min(380px,100%)] rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] shadow-soft p-7 sm:p-8">
         <div className="font-serif italic text-[34px] leading-none tracking-tight text-[color:var(--ink)]">
           paintoo<span className="text-[color:var(--accent)]">.</span>
         </div>

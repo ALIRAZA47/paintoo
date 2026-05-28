@@ -28,6 +28,14 @@ import { TopBar } from "./TopBar";
 import { LeftPanel } from "./LeftPanel";
 import { RightPanel } from "./RightPanel";
 import { Modals } from "./Modals";
+import { useIsMobile } from "@/lib/useIsMobile";
+import {
+  BottomSheet,
+  MobileActionBar,
+  MobileTopBar,
+  MoreSheet,
+  type SheetKind,
+} from "./MobileShell";
 
 /* ───────────────────────────────────────────────────────── types ─── */
 
@@ -149,6 +157,13 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+
+  const isMobile = useIsMobile();
+  const [sheet, setSheet] = useState<SheetKind>(null);
+  /* close any open sheet when switching to desktop layout */
+  useEffect(() => {
+    if (!isMobile) setSheet(null);
+  }, [isMobile]);
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [fileName, setFileName] = useState(design.name);
@@ -871,10 +886,42 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
   /* ───────────── pointer pipeline ─────────────────────── */
   const panStartRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const spacePanRef = useRef(false);
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const gestureRef = useRef<null | {
+    startDist: number;
+    startCentroid: { x: number; y: number };
+    startView: { x: number; y: number; zoom: number };
+  }>(null);
 
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
+
+    function discardStrokeIfAny() {
+      // Roll back any in-progress single-finger stroke so it doesn't get
+      // baked into history when the user starts a two-finger gesture.
+      if (!drawingRef.current) return;
+      const layer = strokeLayerRef.current;
+      const before = strokeBeforeRef.current;
+      if (layer && before) layer.ctx.putImageData(before, 0, 0);
+      drawingRef.current = false;
+      strokePtsRef.current = [];
+      strokeBeforeRef.current = null;
+      strokeLayerRef.current = null;
+      drawnUpToRef.current = 0;
+    }
+
+    function startGesture() {
+      const pts = [...activePointersRef.current.values()];
+      if (pts.length < 2) return;
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      gestureRef.current = {
+        startDist: Math.max(1, Math.hypot(dx, dy)),
+        startCentroid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+        startView: { ...viewRef.current },
+      };
+    }
 
     function onDown(e: PointerEvent) {
       const target = e.target as HTMLElement;
@@ -884,6 +931,19 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         )
       )
         return;
+
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // Two-finger gesture: cancel any single-finger interaction, start pan+zoom.
+      if (activePointersRef.current.size >= 2) {
+        discardStrokeIfAny();
+        cancelPolygon();
+        shapeStartRef.current = null;
+        panStartRef.current = null;
+        startGesture();
+        return;
+      }
+
       if (textInputRef.current) {
         commitTextEdit();
         return;
@@ -935,6 +995,32 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
     }
 
     function onMove(e: PointerEvent) {
+      if (activePointersRef.current.has(e.pointerId)) {
+        activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      // Two-finger pan + pinch zoom takes over while gesture is active.
+      if (gestureRef.current && activePointersRef.current.size >= 2) {
+        const pts = [...activePointersRef.current.values()];
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const dist = Math.max(1, Math.hypot(dx, dy));
+        const cx = (pts[0].x + pts[1].x) / 2;
+        const cy = (pts[0].y + pts[1].y) / 2;
+        const g = gestureRef.current;
+        const factor = dist / g.startDist;
+        const old = g.startView.zoom;
+        const nz = Math.max(0.05, Math.min(32, old * factor));
+        const wx = (g.startCentroid.x - g.startView.x) / old;
+        const wy = (g.startCentroid.y - g.startView.y) / old;
+        viewRef.current.zoom = nz;
+        viewRef.current.x = cx - wx * nz;
+        viewRef.current.y = cy - wy * nz;
+        applyView();
+        updateBrushCursor();
+        return;
+      }
+
       const c = brushCursorRef.current;
       const r = vp!.getBoundingClientRect();
       if (c) {
@@ -967,6 +1053,9 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
     }
 
     function onUp(e: PointerEvent) {
+      activePointersRef.current.delete(e.pointerId);
+      if (activePointersRef.current.size < 2) gestureRef.current = null;
+
       if (panStartRef.current) {
         panStartRef.current = null;
         vp!.classList.remove("active");
@@ -985,6 +1074,11 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         const p = eventToCanvas(e);
         commitShape(p);
       }
+    }
+
+    function onCancel(e: PointerEvent) {
+      activePointersRef.current.delete(e.pointerId);
+      if (activePointersRef.current.size < 2) gestureRef.current = null;
     }
 
     function onLeave() {
@@ -1016,6 +1110,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
     vp.addEventListener("pointerdown", onDown);
     vp.addEventListener("pointermove", onMove);
     vp.addEventListener("pointerup", onUp);
+    vp.addEventListener("pointercancel", onCancel);
     vp.addEventListener("pointerleave", onLeave);
     vp.addEventListener("pointerenter", onEnter);
     vp.addEventListener("wheel", onWheel, { passive: false });
@@ -1025,6 +1120,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
       vp.removeEventListener("pointerdown", onDown);
       vp.removeEventListener("pointermove", onMove);
       vp.removeEventListener("pointerup", onUp);
+      vp.removeEventListener("pointercancel", onCancel);
       vp.removeEventListener("pointerleave", onLeave);
       vp.removeEventListener("pointerenter", onEnter);
       vp.removeEventListener("wheel", onWheel);
@@ -1293,6 +1389,28 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
       }
     } catch {}
   }, []);
+
+  /* refit canvas when the layout (mobile/desktop) toggles or once on
+     first stable measurement (initial fit may run before grid settles) */
+  const fittedOnceRef = useRef(false);
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    let raf: number;
+    function refit() {
+      const r = vp!.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        fitToView();
+        fittedOnceRef.current = true;
+      }
+    }
+    if (!fittedOnceRef.current) {
+      raf = requestAnimationFrame(() => requestAnimationFrame(refit));
+    } else {
+      refit();
+    }
+    return () => cancelAnimationFrame(raf);
+  }, [isMobile, fitToView]);
 
   /* recompute on resize */
   useEffect(() => {
@@ -1686,66 +1804,120 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
   const toolLabel = tool === "brush" ? `brush · ${brushKind}` : tool;
 
   /* ─────────────────────────────────────────────────────── render ─── */
+  const leftPanelProps = {
+    tool,
+    setTool: setToolWithReset,
+    brushKind,
+    setBrushKind: setBrushKindState,
+    brushSize,
+    setBrushSize,
+    brushOpacity,
+    setBrushOpacity,
+    brushFlow,
+    setBrushFlow,
+    brushSmoothing,
+    setBrushSmoothing,
+    shapeFill,
+    setShapeFill,
+    shapeStroke,
+    setShapeStroke,
+    shapeWeight,
+    setShapeWeight,
+    textFont,
+    setTextFont,
+    textSize,
+    setTextSize,
+    textItalic,
+    setTextItalic,
+    textBold,
+    setTextBold,
+    collapsed: leftCollapsed,
+    setCollapsed: setLeftCollapsed,
+  };
+
+  const rightPanelProps = {
+    color,
+    setColor,
+    setColorFromHex,
+    palette,
+    setPalette,
+    layers: layerStates,
+    activeId,
+    setActive,
+    onLayerVisibility,
+    onLayerRename,
+    onLayerOpacity,
+    onLayerOpacityCommit,
+    onLayerAdd,
+    onLayerDuplicate,
+    onLayerMove,
+    onLayerDelete,
+    collapsed: rightCollapsed,
+    setCollapsed: setRightCollapsed,
+    getThumbCanvas: (id: string) =>
+      layersRef.current.find((l) => l.id === id)?.thumb,
+  };
+
   return (
     <div
-      className="h-screen w-screen grid bg-[color:var(--bg-deep)]"
-      style={{ gridTemplateRows: "52px 1fr 26px", gridTemplateColumns: "minmax(0, 1fr)" }}
+      className="h-[100dvh] w-screen grid bg-[color:var(--bg-deep)]"
+      style={
+        isMobile
+          ? { gridTemplateRows: "48px 1fr 64px", gridTemplateColumns: "minmax(0, 1fr)" }
+          : { gridTemplateRows: "52px 1fr 26px", gridTemplateColumns: "minmax(0, 1fr)" }
+      }
     >
-      <TopBar
-        fileName={fileName}
-        onFileNameChange={setFileName}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        saving={saving}
-        onUndo={undo}
-        onRedo={redo}
-        onNew={() => router.push("/")}
-        onImport={() => fileInputRef.current?.click()}
-        onExport={() => setModal("export")}
-        onClear={() => setModal("clear")}
-        onHelp={() => setModal("help")}
-        onTheme={toggleTheme}
-        onSave={onSave}
-        onHome={() => router.push("/")}
-      />
-
-      <div className="relative grid min-h-0" style={{ gridTemplateColumns: "auto 1fr auto" }}>
-        <LeftPanel
-          tool={tool}
-          setTool={setToolWithReset}
-          brushKind={brushKind}
-          setBrushKind={setBrushKindState}
-          brushSize={brushSize}
-          setBrushSize={setBrushSize}
-          brushOpacity={brushOpacity}
-          setBrushOpacity={setBrushOpacity}
-          brushFlow={brushFlow}
-          setBrushFlow={setBrushFlow}
-          brushSmoothing={brushSmoothing}
-          setBrushSmoothing={setBrushSmoothing}
-          shapeFill={shapeFill}
-          setShapeFill={setShapeFill}
-          shapeStroke={shapeStroke}
-          setShapeStroke={setShapeStroke}
-          shapeWeight={shapeWeight}
-          setShapeWeight={setShapeWeight}
-          textFont={textFont}
-          setTextFont={setTextFont}
-          textSize={textSize}
-          setTextSize={setTextSize}
-          textItalic={textItalic}
-          setTextItalic={setTextItalic}
-          textBold={textBold}
-          setTextBold={setTextBold}
-          collapsed={leftCollapsed}
-          setCollapsed={setLeftCollapsed}
+      {isMobile ? (
+        <MobileTopBar
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          saving={saving}
+          onUndo={undo}
+          onRedo={redo}
+          onSave={onSave}
+          onHome={() => router.push("/")}
+          onMore={() => setSheet("more")}
         />
+      ) : (
+        <TopBar
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          saving={saving}
+          onUndo={undo}
+          onRedo={redo}
+          onNew={() => router.push("/")}
+          onImport={() => fileInputRef.current?.click()}
+          onExport={() => setModal("export")}
+          onClear={() => setModal("clear")}
+          onHelp={() => setModal("help")}
+          onTheme={toggleTheme}
+          onSave={onSave}
+          onHome={() => router.push("/")}
+        />
+      )}
+
+      <div
+        className="relative grid min-h-0"
+        style={
+          isMobile
+            ? { gridTemplateColumns: "minmax(0, 1fr)" }
+            : { gridTemplateColumns: "auto 1fr auto" }
+        }
+      >
+        {!isMobile && <LeftPanel {...leftPanelProps} />}
 
         {/* viewport */}
         <div
           ref={viewportRef}
           className={`relative overflow-hidden ${theme === "dark" ? "viewport-bg-dark" : "viewport-bg-light"} ${tool === "hand" ? "tool-hand" : ""}`}
-          style={{ cursor: tool === "hand" ? "grab" : "none" }}
+          style={{
+            cursor: tool === "hand" ? "grab" : isMobile ? "default" : "none",
+            touchAction: "none",
+          }}
         >
           <div
             ref={wrapRef}
@@ -1810,39 +1982,30 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
           </div>
         </div>
 
-        <RightPanel
-          color={color}
-          setColor={setColor}
-          setColorFromHex={setColorFromHex}
-          palette={palette}
-          setPalette={setPalette}
-          layers={layerStates}
-          activeId={activeId}
-          setActive={setActive}
-          onLayerVisibility={onLayerVisibility}
-          onLayerRename={onLayerRename}
-          onLayerOpacity={onLayerOpacity}
-          onLayerOpacityCommit={onLayerOpacityCommit}
-          onLayerAdd={onLayerAdd}
-          onLayerDuplicate={onLayerDuplicate}
-          onLayerMove={onLayerMove}
-          onLayerDelete={onLayerDelete}
-          collapsed={rightCollapsed}
-          setCollapsed={setRightCollapsed}
-          getThumbCanvas={(id) => layersRef.current.find((l) => l.id === id)?.thumb}
-        />
+        {!isMobile && <RightPanel {...rightPanelProps} />}
       </div>
 
-      {/* status bar */}
-      <div className="flex items-center gap-3.5 bg-[color:var(--panel)] border-t border-[color:var(--line)] px-3.5 text-[color:var(--ink-3)] font-mono text-[10.5px] z-[20]">
-        <span className="px-1.5 py-[2px] bg-[color:var(--bg)] rounded border border-[color:var(--line)] text-[color:var(--ink-2)]">
-          {toolLabel}
-        </span>
-        <span>{pos}</span>
-        <span className="ml-auto">{design.width} × {design.height}</span>
-        <span>{histIdx + 1} / {histLen}</span>
-        <span className="text-[color:var(--accent)] font-serif italic">marks become memories</span>
-      </div>
+      {/* status bar (desktop) or action bar (mobile) */}
+      {isMobile ? (
+        <MobileActionBar
+          sheet={sheet}
+          setSheet={setSheet}
+          tool={tool}
+          brushKind={brushKind}
+          color={color}
+          layerCount={layerStates.length}
+        />
+      ) : (
+        <div className="flex items-center gap-3.5 bg-[color:var(--panel)] border-t border-[color:var(--line)] px-3.5 text-[color:var(--ink-3)] font-mono text-[10.5px] z-[20]">
+          <span className="px-1.5 py-[2px] bg-[color:var(--bg)] rounded border border-[color:var(--line)] text-[color:var(--ink-2)]">
+            {toolLabel}
+          </span>
+          <span>{pos}</span>
+          <span className="ml-auto">{design.width} × {design.height}</span>
+          <span>{histIdx + 1} / {histLen}</span>
+          <span className="text-[color:var(--accent)] font-serif italic">marks become memories</span>
+        </div>
+      )}
 
       {/* toasts */}
       <div className="fixed left-1/2 bottom-[60px] -translate-x-1/2 flex flex-col gap-2 items-center z-[150] pointer-events-none">
@@ -1877,6 +2040,46 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
           setModal(null);
         }}
       />
+
+      {/* mobile bottom sheets */}
+      {isMobile && (
+        <>
+          <BottomSheet
+            open={sheet === "tools"}
+            onClose={() => setSheet(null)}
+            title="tools"
+            maxHeight="78vh"
+          >
+            <LeftPanel {...leftPanelProps} inSheet />
+          </BottomSheet>
+          <BottomSheet
+            open={sheet === "color"}
+            onClose={() => setSheet(null)}
+            title="color"
+            maxHeight="78vh"
+          >
+            <RightPanel {...rightPanelProps} inSheet section="color" />
+          </BottomSheet>
+          <BottomSheet
+            open={sheet === "layers"}
+            onClose={() => setSheet(null)}
+            title="layers"
+            maxHeight="78vh"
+          >
+            <RightPanel {...rightPanelProps} inSheet section="layers" />
+          </BottomSheet>
+          <MoreSheet
+            open={sheet === "more"}
+            onClose={() => setSheet(null)}
+            onImport={() => fileInputRef.current?.click()}
+            onExport={() => setModal("export")}
+            onClear={() => setModal("clear")}
+            onHelp={() => setModal("help")}
+            onTheme={toggleTheme}
+            onHome={() => router.push("/")}
+          />
+        </>
+      )}
     </div>
   );
 }

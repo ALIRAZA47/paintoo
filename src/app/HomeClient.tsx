@@ -75,10 +75,10 @@ export default function HomeClient({
   }
 
   return (
-    <div className="min-h-screen bg-[color:var(--bg-deep)] text-[color:var(--ink)]">
+    <div className="h-[100dvh] bg-[color:var(--bg-deep)] text-[color:var(--ink)] overflow-y-auto">
       {/* topbar */}
-      <header className="flex items-center gap-4 px-6 h-[60px] border-b border-[color:var(--line)] bg-[color:var(--panel)] sticky top-0 z-20">
-        <div className="font-serif italic text-[28px] leading-none tracking-tight select-none">
+      <header className="flex items-center gap-2 sm:gap-4 px-4 sm:px-6 h-[56px] sm:h-[60px] border-b border-[color:var(--line)] bg-[color:var(--panel)] sticky top-0 z-20">
+        <div className="font-serif italic text-[24px] sm:text-[28px] leading-none tracking-tight select-none">
           paintoo<span className="text-[color:var(--accent)]">.</span>
         </div>
         <span className="font-serif italic text-[15px] text-[color:var(--ink-3)] hidden sm:inline">
@@ -87,8 +87,8 @@ export default function HomeClient({
         <div className="flex-1" />
         <button
           onClick={toggleTheme}
-          className="w-[34px] h-[34px] rounded-md grid place-items-center text-[color:var(--ink-2)] hover:bg-[color:var(--panel-2)] hover:text-[color:var(--ink)]"
-          data-tip="Toggle theme"
+          className="w-9 h-9 rounded-md grid place-items-center text-[color:var(--ink-2)] active:bg-[color:var(--panel-2)] hover:bg-[color:var(--panel-2)] hover:text-[color:var(--ink)]"
+          aria-label="Toggle theme"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
@@ -96,19 +96,19 @@ export default function HomeClient({
         </button>
         <button
           onClick={logout}
-          className="text-[12.5px] text-[color:var(--ink-2)] hover:text-[color:var(--ink)] px-3 py-1.5 rounded-md hover:bg-[color:var(--panel-2)]"
+          className="text-[12.5px] text-[color:var(--ink-2)] hover:text-[color:var(--ink)] px-3 py-1.5 rounded-md hover:bg-[color:var(--panel-2)] active:bg-[color:var(--panel-2)]"
         >
           sign out
         </button>
       </header>
 
-      <main className="max-w-[1280px] mx-auto px-6 py-10">
-        <div className="flex items-end justify-between mb-8">
+      <main className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-[calc(env(safe-area-inset-bottom)+96px)] sm:pb-10">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="font-serif italic text-[42px] leading-none tracking-tight">
+            <h1 className="font-serif italic text-[34px] sm:text-[42px] leading-none tracking-tight">
               your studio<span className="text-[color:var(--accent)]">.</span>
             </h1>
-            <p className="text-[color:var(--ink-3)] mt-3 text-[13.5px]">
+            <p className="text-[color:var(--ink-3)] mt-2 sm:mt-3 text-[13.5px]">
               {designs.length === 0
                 ? "no canvases yet — leave a first mark."
                 : `${designs.length} canvas${designs.length === 1 ? "" : "es"}`}
@@ -116,7 +116,7 @@ export default function HomeClient({
           </div>
           <button
             onClick={() => setShowNew(true)}
-            className="rounded-[8px] bg-[color:var(--accent)] hover:bg-[color:var(--accent-2)] text-white font-medium text-[13px] py-2.5 px-4 transition-colors flex items-center gap-2"
+            className="hidden sm:flex rounded-[8px] bg-[color:var(--accent)] hover:bg-[color:var(--accent-2)] text-white font-medium text-[13px] py-2.5 px-4 transition-colors items-center gap-2"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -127,8 +127,8 @@ export default function HomeClient({
         </div>
 
         {designs.length === 0 ? (
-          <div className="border border-dashed border-[color:var(--line)] rounded-xl p-16 grid place-items-center text-center">
-            <div className="font-serif italic text-[28px] text-[color:var(--ink-2)] mb-3">
+          <div className="border border-dashed border-[color:var(--line)] rounded-xl p-10 sm:p-16 grid place-items-center text-center">
+            <div className="font-serif italic text-[24px] sm:text-[28px] text-[color:var(--ink-2)] mb-3">
               an empty studio
             </div>
             <p className="text-[color:var(--ink-3)] mb-6 max-w-[400px]">
@@ -136,19 +136,32 @@ export default function HomeClient({
             </p>
             <button
               onClick={() => setShowNew(true)}
-              className="rounded-[8px] bg-[color:var(--accent)] hover:bg-[color:var(--accent-2)] text-white font-medium text-[13px] py-2.5 px-4"
+              className="rounded-[8px] bg-[color:var(--accent)] hover:bg-[color:var(--accent-2)] active:bg-[color:var(--accent-2)] text-white font-medium text-[13px] py-2.5 px-4"
             >
               start your first canvas
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
             {designs.map((d) => (
               <DesignCard key={d.id} design={d} onDelete={() => deleteDesign(d.id)} />
             ))}
           </div>
         )}
       </main>
+
+      {/* mobile floating action button */}
+      <button
+        onClick={() => setShowNew(true)}
+        className="sm:hidden fixed right-5 z-30 rounded-full bg-[color:var(--accent)] text-white shadow-soft active:bg-[color:var(--accent-2)] flex items-center gap-2 px-5 h-12 font-medium text-[14px]"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 20px)" }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        new canvas
+      </button>
 
       <NewCanvasModal
         open={showNew}

@@ -1,9 +1,21 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "paintoo — a studio for marks",
   description: "A small studio for marks.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "oklch(0.17 0.010 148)" },
+    { media: "(prefers-color-scheme: light)", color: "oklch(0.93 0.010 148)" },
+  ],
 };
 
 export default function RootLayout({

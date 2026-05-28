@@ -12,7 +12,7 @@ import {
 import { ICONS } from "./icons";
 import type { LayerState } from "./CanvasEditor";
 
-export function RightPanel(props: {
+type RightPanelProps = {
   color: HSL;
   setColor: (c: HSL) => void;
   setColorFromHex: (hex: string) => void;
@@ -32,7 +32,13 @@ export function RightPanel(props: {
   collapsed: boolean;
   setCollapsed: (b: boolean) => void;
   getThumbCanvas: (id: string) => HTMLCanvasElement | undefined;
-}) {
+  /** When true: render as flat content for embedding in a mobile sheet. */
+  inSheet?: boolean;
+  /** Limit which sections render (mobile sheets show just one). */
+  section?: "all" | "color" | "layers";
+};
+
+export function RightPanel(props: RightPanelProps) {
   const {
     color,
     setColor,
@@ -53,7 +59,16 @@ export function RightPanel(props: {
     collapsed,
     setCollapsed,
     getThumbCanvas,
+    inSheet,
   } = props;
+
+  if (inSheet) {
+    return (
+      <div className="flex flex-col pb-4">
+        <RightPanelSections {...props} />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -63,89 +78,7 @@ export function RightPanel(props: {
         }`}
       >
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-          {/* color */}
-          <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
-            <div className="flex justify-between items-center mb-3">
-              <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
-                Color
-              </div>
-            </div>
-            <ColorPicker color={color} setColor={setColor} setColorFromHex={setColorFromHex} />
-            <Palette
-              color={color}
-              palette={palette}
-              setPalette={setPalette}
-              setColorFromHex={setColorFromHex}
-            />
-          </div>
-
-          {/* layers */}
-          <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
-            <div className="flex justify-between items-center mb-3">
-              <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
-                Layers
-              </div>
-              <span className="text-[10.5px] text-[color:var(--ink-4)] uppercase tracking-wider font-medium">
-                {layers.length}
-              </span>
-            </div>
-            <LayerOpacitySlider
-              layer={layers.find((l) => l.id === activeId)}
-              onChange={onLayerOpacity}
-              onCommit={onLayerOpacityCommit}
-            />
-            <div className="flex flex-col-reverse gap-1 mt-2">
-              {layers.map((l) => (
-                <LayerRow
-                  key={l.id}
-                  layer={l}
-                  active={l.id === activeId}
-                  onActivate={() => setActive(l.id)}
-                  onVisibility={() => onLayerVisibility(l.id)}
-                  onRename={(name) => onLayerRename(l.id, name)}
-                  thumb={getThumbCanvas(l.id)}
-                />
-              ))}
-            </div>
-            <div className="flex gap-1 mt-3">
-              <LayerActionButton tip="New layer" onClick={onLayerAdd}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </LayerActionButton>
-              <LayerActionButton tip="Duplicate" onClick={onLayerDuplicate}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              </LayerActionButton>
-              <LayerActionButton
-                tip="Move up"
-                onClick={() => onLayerMove(1)}
-                disabled={!activeId || layers.findIndex((l) => l.id === activeId) >= layers.length - 1}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 14 12 8 18 14" />
-                </svg>
-              </LayerActionButton>
-              <LayerActionButton
-                tip="Move down"
-                onClick={() => onLayerMove(-1)}
-                disabled={!activeId || layers.findIndex((l) => l.id === activeId) <= 0}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 10 12 16 18 10" />
-                </svg>
-              </LayerActionButton>
-              <LayerActionButton tip="Delete" onClick={onLayerDelete} disabled={layers.length <= 1}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                </svg>
-              </LayerActionButton>
-            </div>
-          </div>
+          <RightPanelSections {...props} />
         </div>
 
         <button
@@ -168,6 +101,120 @@ export function RightPanel(props: {
             <polyline points="6 1.5 2.5 4.5 6 7.5" />
           </svg>
         </button>
+      )}
+    </>
+  );
+}
+
+function RightPanelSections(props: RightPanelProps) {
+  const {
+    color,
+    setColor,
+    setColorFromHex,
+    palette,
+    setPalette,
+    layers,
+    activeId,
+    setActive,
+    onLayerVisibility,
+    onLayerRename,
+    onLayerOpacity,
+    onLayerOpacityCommit,
+    onLayerAdd,
+    onLayerDuplicate,
+    onLayerMove,
+    onLayerDelete,
+    getThumbCanvas,
+    section = "all",
+  } = props;
+  const showColor = section === "all" || section === "color";
+  const showLayers = section === "all" || section === "layers";
+  return (
+    <>
+      {showColor && (
+      <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+        <div className="flex justify-between items-center mb-3">
+          <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
+            Color
+          </div>
+        </div>
+        <ColorPicker color={color} setColor={setColor} setColorFromHex={setColorFromHex} />
+        <Palette
+          color={color}
+          palette={palette}
+          setPalette={setPalette}
+          setColorFromHex={setColorFromHex}
+        />
+      </div>
+      )}
+
+      {showLayers && (
+      <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+        <div className="flex justify-between items-center mb-3">
+          <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
+            Layers
+          </div>
+          <span className="text-[10.5px] text-[color:var(--ink-4)] uppercase tracking-wider font-medium">
+            {layers.length}
+          </span>
+        </div>
+        <LayerOpacitySlider
+          layer={layers.find((l) => l.id === activeId)}
+          onChange={onLayerOpacity}
+          onCommit={onLayerOpacityCommit}
+        />
+        <div className="flex flex-col-reverse gap-1 mt-2">
+          {layers.map((l) => (
+            <LayerRow
+              key={l.id}
+              layer={l}
+              active={l.id === activeId}
+              onActivate={() => setActive(l.id)}
+              onVisibility={() => onLayerVisibility(l.id)}
+              onRename={(name) => onLayerRename(l.id, name)}
+              thumb={getThumbCanvas(l.id)}
+            />
+          ))}
+        </div>
+        <div className="flex gap-1 mt-3">
+          <LayerActionButton tip="New layer" onClick={onLayerAdd}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </LayerActionButton>
+          <LayerActionButton tip="Duplicate" onClick={onLayerDuplicate}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </LayerActionButton>
+          <LayerActionButton
+            tip="Move up"
+            onClick={() => onLayerMove(1)}
+            disabled={!activeId || layers.findIndex((l) => l.id === activeId) >= layers.length - 1}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 14 12 8 18 14" />
+            </svg>
+          </LayerActionButton>
+          <LayerActionButton
+            tip="Move down"
+            onClick={() => onLayerMove(-1)}
+            disabled={!activeId || layers.findIndex((l) => l.id === activeId) <= 0}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 10 12 16 18 10" />
+            </svg>
+          </LayerActionButton>
+          <LayerActionButton tip="Delete" onClick={onLayerDelete} disabled={layers.length <= 1}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+          </LayerActionButton>
+        </div>
+      </div>
       )}
     </>
   );

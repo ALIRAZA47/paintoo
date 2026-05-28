@@ -3,46 +3,46 @@
 @tailwind utilities;
 
 :root[data-theme="dark"] {
-  --bg: oklch(0.16 0.008 60);
-  --bg-deep: oklch(0.12 0.008 60);
-  --panel: oklch(0.20 0.008 60);
-  --panel-2: oklch(0.23 0.009 60);
-  --line: oklch(0.28 0.010 60);
-  --line-soft: oklch(0.24 0.010 60);
-  --ink: oklch(0.96 0.010 80);
-  --ink-2: oklch(0.78 0.010 70);
-  --ink-3: oklch(0.58 0.010 70);
-  --ink-4: oklch(0.42 0.010 70);
-  --accent: oklch(0.70 0.175 38);
-  --accent-2: oklch(0.80 0.140 38);
-  --accent-dim: oklch(0.42 0.110 38);
-  --danger: oklch(0.62 0.180 25);
-  --check-a: oklch(0.22 0.006 60);
-  --check-b: oklch(0.18 0.006 60);
-  --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
-  --canvas-bg: oklch(0.10 0.006 60);
+  --bg: oklch(0.17 0.010 148);
+  --bg-deep: oklch(0.13 0.010 148);
+  --panel: oklch(0.21 0.012 146);
+  --panel-2: oklch(0.25 0.014 146);
+  --line: oklch(0.30 0.016 144);
+  --line-soft: oklch(0.26 0.014 144);
+  --ink: oklch(0.94 0.010 142);
+  --ink-2: oklch(0.78 0.012 142);
+  --ink-3: oklch(0.58 0.012 142);
+  --ink-4: oklch(0.44 0.010 142);
+  --accent: oklch(0.52 0.060 142);
+  --accent-2: oklch(0.60 0.055 142);
+  --accent-dim: oklch(0.34 0.045 142);
+  --danger: oklch(0.62 0.140 25);
+  --check-a: oklch(0.23 0.008 148);
+  --check-b: oklch(0.19 0.008 148);
+  --shadow: 0 10px 30px -12px rgba(8, 18, 10, 0.65), 0 2px 6px -1px rgba(8, 18, 10, 0.45);
+  --canvas-bg: oklch(0.11 0.008 148);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg: oklch(0.97 0.006 80);
-  --bg-deep: oklch(0.94 0.008 80);
-  --panel: oklch(0.995 0.004 80);
-  --panel-2: oklch(0.97 0.006 80);
-  --line: oklch(0.86 0.010 80);
-  --line-soft: oklch(0.91 0.008 80);
-  --ink: oklch(0.20 0.010 60);
-  --ink-2: oklch(0.36 0.010 60);
-  --ink-3: oklch(0.50 0.010 60);
-  --ink-4: oklch(0.66 0.010 60);
-  --accent: oklch(0.60 0.180 35);
-  --accent-2: oklch(0.52 0.175 35);
-  --accent-dim: oklch(0.86 0.090 35);
-  --danger: oklch(0.55 0.190 25);
-  --check-a: oklch(0.94 0.005 80);
-  --check-b: oklch(0.88 0.006 80);
-  --shadow: 0 10px 28px -14px rgba(60, 40, 20, 0.18), 0 2px 4px -2px rgba(60, 40, 20, 0.10);
-  --canvas-bg: oklch(0.92 0.008 80);
+  --bg: oklch(0.93 0.010 148);
+  --bg-deep: oklch(0.89 0.012 148);
+  --panel: oklch(0.96 0.008 148);
+  --panel-2: oklch(0.92 0.010 148);
+  --line: oklch(0.80 0.014 144);
+  --line-soft: oklch(0.86 0.012 144);
+  --ink: oklch(0.22 0.014 148);
+  --ink-2: oklch(0.38 0.014 148);
+  --ink-3: oklch(0.52 0.012 148);
+  --ink-4: oklch(0.64 0.010 148);
+  --accent: oklch(0.42 0.065 142);
+  --accent-2: oklch(0.36 0.070 142);
+  --accent-dim: oklch(0.80 0.045 142);
+  --danger: oklch(0.52 0.160 25);
+  --check-a: oklch(0.90 0.010 148);
+  --check-b: oklch(0.84 0.012 148);
+  --shadow: 0 10px 28px -14px rgba(30, 45, 30, 0.22), 0 2px 4px -2px rgba(30, 45, 30, 0.14);
+  --canvas-bg: oklch(0.86 0.012 148);
   color-scheme: light;
 }
 
@@ -350,10 +350,10 @@ select.num-input {
 
 /* viewport bg radial */
 .viewport-bg-dark {
-  background: radial-gradient(circle at 50% 40%, oklch(0.18 0.008 60), var(--canvas-bg) 80%);
+  background: radial-gradient(circle at 50% 40%, oklch(0.19 0.012 146), var(--canvas-bg) 80%);
 }
 .viewport-bg-light {
-  background: radial-gradient(circle at 50% 40%, oklch(0.96 0.005 80), var(--canvas-bg) 80%);
+  background: radial-gradient(circle at 50% 40%, oklch(0.92 0.010 148), var(--canvas-bg) 80%);
 }
 
 /* canvas-wrap shadow */
