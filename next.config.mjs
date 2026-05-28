@@ -5,7 +5,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  // Keep libsql's native module (used by file: URLs in dev) out of the bundle.
+  serverExternalPackages: ["@libsql/client", "libsql"],
   outputFileTracingRoot: __dirname,
   experimental: {},
 };

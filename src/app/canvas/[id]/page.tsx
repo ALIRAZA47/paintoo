@@ -12,7 +12,7 @@ export default async function CanvasPage({
   const { id: pid } = await params;
   const id = Number(pid);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const design = getDesign(id);
+  const design = await getDesign(id);
   if (!design) notFound();
 
   let layers: Array<{ id: string; name: string; visible: boolean; opacity: number; dataUrl: string | null }> = [];

@@ -23,7 +23,8 @@ There is no test suite. Verify behavior by running the dev server and exercising
 AUTH_USERNAME=...
 AUTH_PASSWORD=...
 AUTH_SECRET=...     # >= 8 chars, used to sign session cookies
-# DB_PATH=./data/paintoo.db   # optional
+# TURSO_DATABASE_URL=libsql://...turso.io   # optional; falls back to file:./data/paintoo.db
+# TURSO_AUTH_TOKEN=ey...
 ```
 
 The middleware returns HTTP 500 with an explicit message if `AUTH_SECRET` is missing.
@@ -38,7 +39,15 @@ Cookie format: `<encoded-username>.<exp-ms>.<hmac-sha256-sig-base64url>`, 30-day
 
 ### Database
 
-`src/lib/db.ts` opens `better-sqlite3` once per Node process (cached on `globalThis.__paintooDb`) and creates the `designs` table on first open. One table, schema-on-open — no migration system. Layer bitmaps are stored as a JSON string of `{id, name, visible, opacity, dataUrl}` in the `layers` column; `thumbnail` is a flattened 0.4× PNG data URL. `next.config.mjs` puts `better-sqlite3` in `serverExternalPackages` so it isn't bundled.
+`src/lib/db.ts` uses `@libsql/client`. The same client handles both:
+- `file:./data/paintoo.db` for local dev (libsql native bindings, no Turso account needed).
+- `libsql://<db>-<org>.turso.io` + `TURSO_AUTH_TOKEN` for production (HTTP transport, works on Vercel functions).
+
+The connection (and its in-flight schema bootstrap promise) is cached on `globalThis` so we open at most one client per Node process. All exported CRUD functions (`listDesigns`, `getDesign`, `createDesign`, `updateDesign`, `deleteDesign`) are **async** — every call site must `await`. Schema is created lazily on first call; one table, no migration system. Layer bitmaps are stored as a JSON string of `{id, name, visible, opacity, dataUrl}` in the `layers` column; `thumbnail` is a flattened 0.4× PNG data URL.
+
+`next.config.mjs` lists `@libsql/client` and `libsql` in `serverExternalPackages` so the native module isn't bundled.
+
+⚠ The PNG data URL approach can make individual rows multi-MB on big canvases. Free-tier Turso handles it, but if you ever migrate to Vercel Postgres + Blob, plan to move the layer bytes out of the row.
 
 ### Canvas editor (`src/app/canvas/[id]/`)
 

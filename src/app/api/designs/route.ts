@@ -4,7 +4,7 @@ import { createDesign, listDesigns } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const designs = listDesigns();
+  const designs = await listDesigns();
   return NextResponse.json({ designs });
 }
 
@@ -20,6 +20,6 @@ export async function POST(req: Request) {
   const thumbnail = typeof body.thumbnail === "string" ? body.thumbnail : null;
   const palette = typeof body.palette === "string" ? body.palette : null;
 
-  const design = createDesign({ name, width, height, bg, layers, thumbnail, palette });
+  const design = await createDesign({ name, width, height, bg, layers, thumbnail, palette });
   return NextResponse.json({ design });
 }

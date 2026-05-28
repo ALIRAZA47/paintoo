@@ -15,7 +15,7 @@ export async function GET(
   const { id: pid } = await params;
   const id = parseId(pid);
   if (id == null) return NextResponse.json({ error: "bad id" }, { status: 400 });
-  const design = getDesign(id);
+  const design = await getDesign(id);
   if (!design) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ design });
 }
@@ -36,7 +36,7 @@ export async function PATCH(
   if (typeof body.layers === "string") patch.layers = body.layers;
   if (typeof body.palette === "string" || body.palette === null) patch.palette = body.palette;
 
-  const design = updateDesign(id, patch);
+  const design = await updateDesign(id, patch);
   if (!design) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ design });
 }
@@ -48,7 +48,7 @@ export async function DELETE(
   const { id: pid } = await params;
   const id = parseId(pid);
   if (id == null) return NextResponse.json({ error: "bad id" }, { status: 400 });
-  const ok = deleteDesign(id);
+  const ok = await deleteDesign(id);
   if (!ok) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

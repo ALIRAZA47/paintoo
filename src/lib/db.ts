@@ -1,48 +1,74 @@
-import Database from "better-sqlite3";
+import { createClient, type Client, type InValue } from "@libsql/client";
 import path from "node:path";
 import fs from "node:fs";
 
-const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "paintoo.db");
+/**
+ * Connection URL.
+ *   - production / shared dev: a Turso DB → `libsql://<db>-<org>.turso.io`
+ *     plus `TURSO_AUTH_TOKEN`
+ *   - local-only dev with no Turso account: defaults to a local file under
+ *     ./data/paintoo.db (libsql falls back to its native SQLite for file: URLs)
+ */
+const DB_URL =
+  process.env.TURSO_DATABASE_URL ||
+  `file:${path.resolve(process.cwd(), "data", "paintoo.db")}`;
+const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __paintooDb: Database.Database | undefined;
+  var __paintooDb: Client | undefined;
+  // eslint-disable-next-line no-var
+  var __paintooSchema: Promise<void> | undefined;
 }
 
-function ensureDir(filePath: string) {
+function ensureLocalDir(url: string) {
+  // Only relevant for file: URLs.
+  if (!url.startsWith("file:")) return;
+  const filePath = url.slice("file:".length);
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function open(): Database.Database {
-  ensureDir(DB_PATH);
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS designs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      width INTEGER NOT NULL,
-      height INTEGER NOT NULL,
-      bg TEXT NOT NULL DEFAULT 'transparent',
-      thumbnail TEXT,
-      layers TEXT NOT NULL DEFAULT '[]',
-      palette TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_designs_updated_at ON designs (updated_at DESC);
-  `);
-  return db;
-}
-
-export function getDb(): Database.Database {
+function open(): Client {
   if (!global.__paintooDb) {
-    global.__paintooDb = open();
+    ensureLocalDir(DB_URL);
+    global.__paintooDb = createClient({
+      url: DB_URL,
+      ...(DB_TOKEN ? { authToken: DB_TOKEN } : {}),
+    });
   }
   return global.__paintooDb;
 }
+
+async function ensureSchema(client: Client) {
+  await client.batch(
+    [
+      `CREATE TABLE IF NOT EXISTS designs (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         name TEXT NOT NULL,
+         width INTEGER NOT NULL,
+         height INTEGER NOT NULL,
+         bg TEXT NOT NULL DEFAULT 'transparent',
+         thumbnail TEXT,
+         layers TEXT NOT NULL DEFAULT '[]',
+         palette TEXT,
+         created_at INTEGER NOT NULL,
+         updated_at INTEGER NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_designs_updated_at ON designs (updated_at DESC)`,
+    ],
+    "write",
+  );
+}
+
+async function getClient(): Promise<Client> {
+  const c = open();
+  if (!global.__paintooSchema) global.__paintooSchema = ensureSchema(c);
+  await global.__paintooSchema;
+  return c;
+}
+
+/* ────────────────────────────────────────── types ─── */
 
 export type DesignRow = {
   id: number;
@@ -67,23 +93,70 @@ export type DesignSummary = {
   updated_at: number;
 };
 
-export function listDesigns(): DesignSummary[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT id, name, width, height, thumbnail, created_at, updated_at
+// libsql returns columns as bigints for INTEGER. We coerce to number where the
+// value fits, since IDs and timestamps are well within Number.MAX_SAFE_INTEGER.
+function toNum(v: unknown): number {
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return Number(v);
+  return Number(v as number);
+}
+function toStr(v: unknown): string {
+  return v == null ? "" : String(v);
+}
+function toNullStr(v: unknown): string | null {
+  if (v == null) return null;
+  return String(v);
+}
+
+function toSummary(r: Record<string, unknown>): DesignSummary {
+  return {
+    id: toNum(r.id),
+    name: toStr(r.name),
+    width: toNum(r.width),
+    height: toNum(r.height),
+    thumbnail: toNullStr(r.thumbnail),
+    created_at: toNum(r.created_at),
+    updated_at: toNum(r.updated_at),
+  };
+}
+function toRow(r: Record<string, unknown>): DesignRow {
+  return {
+    id: toNum(r.id),
+    name: toStr(r.name),
+    width: toNum(r.width),
+    height: toNum(r.height),
+    bg: toStr(r.bg),
+    thumbnail: toNullStr(r.thumbnail),
+    layers: toStr(r.layers ?? "[]"),
+    palette: toNullStr(r.palette),
+    created_at: toNum(r.created_at),
+    updated_at: toNum(r.updated_at),
+  };
+}
+
+/* ────────────────────────────────────────── CRUD ─── */
+
+export async function listDesigns(): Promise<DesignSummary[]> {
+  const c = await getClient();
+  const result = await c.execute(
+    `SELECT id, name, width, height, thumbnail, created_at, updated_at
        FROM designs ORDER BY updated_at DESC`,
-    )
-    .all() as DesignSummary[];
-  return rows;
+  );
+  return result.rows.map((r) => toSummary(r as unknown as Record<string, unknown>));
 }
 
-export function getDesign(id: number): DesignRow | undefined {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM designs WHERE id = ?`).get(id) as DesignRow | undefined;
+export async function getDesign(id: number): Promise<DesignRow | undefined> {
+  const c = await getClient();
+  const result = await c.execute({
+    sql: `SELECT * FROM designs WHERE id = ?`,
+    args: [id as InValue],
+  });
+  const row = result.rows[0];
+  return row ? toRow(row as unknown as Record<string, unknown>) : undefined;
 }
 
-export function createDesign(input: {
+export async function createDesign(input: {
   name: string;
   width: number;
   height: number;
@@ -91,15 +164,13 @@ export function createDesign(input: {
   layers: string;
   thumbnail?: string | null;
   palette?: string | null;
-}): DesignRow {
-  const db = getDb();
+}): Promise<DesignRow> {
+  const c = await getClient();
   const now = Date.now();
-  const info = db
-    .prepare(
-      `INSERT INTO designs (name, width, height, bg, thumbnail, layers, palette, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  const result = await c.execute({
+    sql: `INSERT INTO designs (name, width, height, bg, thumbnail, layers, palette, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
       input.name,
       input.width,
       input.height,
@@ -109,11 +180,13 @@ export function createDesign(input: {
       input.palette ?? null,
       now,
       now,
-    );
-  return getDesign(Number(info.lastInsertRowid))!;
+    ] as InValue[],
+  });
+  const id = Number(result.lastInsertRowid ?? 0);
+  return (await getDesign(id))!;
 }
 
-export function updateDesign(
+export async function updateDesign(
   id: number,
   patch: Partial<{
     name: string;
@@ -121,19 +194,30 @@ export function updateDesign(
     layers: string;
     palette: string | null;
   }>,
-): DesignRow | undefined {
-  const db = getDb();
-  const existing = getDesign(id);
+): Promise<DesignRow | undefined> {
+  const c = await getClient();
+  const existing = await getDesign(id);
   if (!existing) return undefined;
   const merged = { ...existing, ...patch, updated_at: Date.now() };
-  db.prepare(
-    `UPDATE designs SET name=?, thumbnail=?, layers=?, palette=?, updated_at=? WHERE id=?`,
-  ).run(merged.name, merged.thumbnail, merged.layers, merged.palette, merged.updated_at, id);
+  await c.execute({
+    sql: `UPDATE designs SET name=?, thumbnail=?, layers=?, palette=?, updated_at=? WHERE id=?`,
+    args: [
+      merged.name,
+      merged.thumbnail,
+      merged.layers,
+      merged.palette,
+      merged.updated_at,
+      id,
+    ] as InValue[],
+  });
   return getDesign(id);
 }
 
-export function deleteDesign(id: number): boolean {
-  const db = getDb();
-  const info = db.prepare(`DELETE FROM designs WHERE id = ?`).run(id);
-  return info.changes > 0;
+export async function deleteDesign(id: number): Promise<boolean> {
+  const c = await getClient();
+  const result = await c.execute({
+    sql: `DELETE FROM designs WHERE id = ?`,
+    args: [id as InValue],
+  });
+  return result.rowsAffected > 0;
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import NewCanvasModal, { type NewCanvasInput } from "./NewCanvasModal";
 import type { DesignSummary } from "@/lib/db";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import NewCanvasModal, { type NewCanvasInput } from "./NewCanvasModal";
 
 function relativeTime(ts: number): string {
   const d = (Date.now() - ts) / 1000;
@@ -106,7 +106,7 @@ export default function HomeClient({
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
           <div>
             <h1 className="font-serif italic text-[34px] sm:text-[42px] leading-none tracking-tight">
-              your studio<span className="text-[color:var(--accent)]">.</span>
+              Muneeba's studio<span className="text-[color:var(--accent)]">.</span>
             </h1>
             <p className="text-[color:var(--ink-3)] mt-2 sm:mt-3 text-[13.5px]">
               {designs.length === 0
