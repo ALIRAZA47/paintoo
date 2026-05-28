@@ -28,6 +28,7 @@ type RightPanelProps = {
   onLayerAdd: () => void;
   onLayerDuplicate: () => void;
   onLayerMove: (dir: 1 | -1) => void;
+  onLayerReorder: (newIds: string[]) => void;
   onLayerDelete: () => void;
   collapsed: boolean;
   setCollapsed: (b: boolean) => void;
@@ -123,6 +124,7 @@ function RightPanelSections(props: RightPanelProps) {
     onLayerAdd,
     onLayerDuplicate,
     onLayerMove,
+    onLayerReorder,
     onLayerDelete,
     getThumbCanvas,
     section = "all",
@@ -163,19 +165,16 @@ function RightPanelSections(props: RightPanelProps) {
           onChange={onLayerOpacity}
           onCommit={onLayerOpacityCommit}
         />
-        <div className="flex flex-col-reverse gap-1 mt-2">
-          {layers.map((l) => (
-            <LayerRow
-              key={l.id}
-              layer={l}
-              active={l.id === activeId}
-              onActivate={() => setActive(l.id)}
-              onVisibility={() => onLayerVisibility(l.id)}
-              onRename={(name) => onLayerRename(l.id, name)}
-              thumb={getThumbCanvas(l.id)}
-            />
-          ))}
-        </div>
+        <DraggableLayerList
+          layers={layers}
+          activeId={activeId}
+          setActive={setActive}
+          onLayerVisibility={onLayerVisibility}
+          onLayerRename={onLayerRename}
+          onLayerReorder={onLayerReorder}
+          getThumbCanvas={getThumbCanvas}
+        />
+
         <div className="flex gap-1 mt-3">
           <LayerActionButton tip="New layer" onClick={onLayerAdd}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -480,82 +479,6 @@ function LayerOpacitySlider({
   );
 }
 
-function LayerRow({
-  layer,
-  active,
-  onActivate,
-  onVisibility,
-  onRename,
-  thumb,
-}: {
-  layer: LayerState;
-  active: boolean;
-  onActivate: () => void;
-  onVisibility: () => void;
-  onRename: (name: string) => void;
-  thumb: HTMLCanvasElement | undefined;
-}) {
-  const thumbHostRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const host = thumbHostRef.current;
-    if (!host) return;
-    host.innerHTML = "";
-    if (thumb) {
-      thumb.style.width = "100%";
-      thumb.style.height = "100%";
-      thumb.style.display = "block";
-      thumb.style.objectFit = "contain";
-      host.appendChild(thumb);
-    }
-  }, [thumb, layer.id]);
-
-  return (
-    <div
-      onClick={onActivate}
-      className={`grid items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors border ${
-        active
-          ? "bg-[color:var(--bg)] border-[color:var(--accent-dim)]"
-          : "bg-[color:var(--panel-2)] border-transparent hover:border-[color:var(--line)]"
-      }`}
-      style={{ gridTemplateColumns: "22px 36px 1fr auto" }}
-    >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onVisibility();
-        }}
-        className={`w-5 h-5 grid place-items-center bg-transparent border-0 cursor-pointer ${
-          layer.visible ? "text-[color:var(--ink-3)]" : "text-[color:var(--ink-4)] opacity-55"
-        } hover:text-[color:var(--ink)]`}
-      >
-        {layer.visible ? ICONS.eye : ICONS.eyeOff}
-      </button>
-      <div
-        ref={thumbHostRef}
-        className="checker-sm w-9 h-7 rounded-[4px] border border-[color:var(--line)] overflow-hidden flex-shrink-0"
-      />
-      <div
-        contentEditable="plaintext-only"
-        spellCheck={false}
-        suppressContentEditableWarning
-        className="text-[12.5px] text-[color:var(--ink)] outline-none border border-transparent px-1 rounded-sm min-w-0 overflow-hidden whitespace-nowrap text-ellipsis focus:bg-[color:var(--panel)] focus:border-[color:var(--accent-dim)]"
-        onClick={(e) => e.stopPropagation()}
-        onBlur={(e) => onRename(e.currentTarget.textContent || "")}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.target as HTMLDivElement).blur();
-          }
-        }}
-      >
-        {layer.name}
-      </div>
-      <div className="font-mono text-[10px] text-[color:var(--ink-3)] w-7 text-right">
-        {Math.round(layer.opacity * 100)}
-      </div>
-    </div>
-  );
-}
 
 function LayerActionButton({
   tip,
@@ -577,5 +500,312 @@ function LayerActionButton({
     >
       {children}
     </button>
+  );
+}
+
+/* ────────────────────────────────────────── draggable layer list ─── */
+
+function DraggableLayerList(props: {
+  layers: LayerState[];
+  activeId: string | null;
+  setActive: (id: string) => void;
+  onLayerVisibility: (id: string) => void;
+  onLayerRename: (id: string, name: string) => void;
+  onLayerReorder: (newIds: string[]) => void;
+  getThumbCanvas: (id: string) => HTMLCanvasElement | undefined;
+}) {
+  const {
+    layers,
+    activeId,
+    setActive,
+    onLayerVisibility,
+    onLayerRename,
+    onLayerReorder,
+    getThumbCanvas,
+  } = props;
+
+  // Visual order is top-down: visualIdx 0 is top of list = last array entry.
+  const visual = [...layers].reverse();
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+
+  type DragState = {
+    id: string;
+    pointerId: number;
+    startClientY: number;
+    deltaY: number;
+    fromVisualIdx: number;
+    overVisualIdx: number;
+    rowHeight: number;
+  };
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  useEffect(() => {
+    dragRef.current = drag;
+  }, [drag]);
+
+  /** Threshold before a click upgrades to a drag (in px). */
+  const DRAG_THRESHOLD = 5;
+
+  const beginIfNeeded = (e: PointerEvent | React.PointerEvent, id: string, fromVisualIdx: number, startY: number) => {
+    if (dragRef.current) return;
+    const row = rowRefs.current.get(id);
+    if (!row) return;
+    const rowHeight = row.getBoundingClientRect().height + 4; // gap-1 = 4px
+    const next: DragState = {
+      id,
+      pointerId: e.pointerId,
+      startClientY: startY,
+      deltaY: 0,
+      fromVisualIdx,
+      overVisualIdx: fromVisualIdx,
+      rowHeight,
+    };
+    setDrag(next);
+    dragRef.current = next;
+  };
+
+  /** Recompute overVisualIdx based on current pointer position. */
+  const updateOver = (clientY: number) => {
+    const cur = dragRef.current;
+    if (!cur) return;
+    const c = containerRef.current;
+    if (!c) return;
+    // For every visual row position, the midpoint at index i (in current,
+    // unmoved layout) is row.top + rowHeight/2. We use the source row's
+    // original top + (i - fromVisualIdx) * rowHeight as a stable reference.
+    // Simpler: iterate other rows and find the one whose midpoint we cross.
+    let target = cur.fromVisualIdx;
+    for (let i = 0; i < visual.length; i++) {
+      const layer = visual[i];
+      if (layer.id === cur.id) continue;
+      const el = rowRefs.current.get(layer.id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      if (clientY > mid && i > target) target = i;
+      else if (clientY < mid && i < target) target = i;
+    }
+    if (target !== cur.overVisualIdx) {
+      const next = { ...cur, overVisualIdx: target, deltaY: clientY - cur.startClientY };
+      setDrag(next);
+      dragRef.current = next;
+    } else {
+      const next = { ...cur, deltaY: clientY - cur.startClientY };
+      setDrag(next);
+      dragRef.current = next;
+    }
+  };
+
+  /* commit / cancel on pointer up anywhere */
+  useEffect(() => {
+    if (!drag) return;
+    function onMove(e: PointerEvent) {
+      if (!dragRef.current || e.pointerId !== dragRef.current.pointerId) return;
+      updateOver(e.clientY);
+    }
+    function onUp(e: PointerEvent) {
+      const cur = dragRef.current;
+      if (!cur || e.pointerId !== cur.pointerId) return;
+      const from = cur.fromVisualIdx;
+      const to = cur.overVisualIdx;
+      setDrag(null);
+      dragRef.current = null;
+      if (from !== to) {
+        // Visual order → array order: reverse and remap.
+        const visualOrder = visual.map((l) => l.id);
+        const [moved] = visualOrder.splice(from, 1);
+        visualOrder.splice(to, 0, moved);
+        const arrayOrder = [...visualOrder].reverse();
+        onLayerReorder(arrayOrder);
+      }
+    }
+    function onCancel() {
+      setDrag(null);
+      dragRef.current = null;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag, onLayerReorder]);
+
+  // Compute per-row offsets while dragging: rows between fromIdx and overIdx
+  // shift by ±rowHeight to make room for the dragged row.
+  const rowOffset = (visualIdx: number, id: string): number => {
+    if (!drag || id === drag.id) return 0;
+    const { fromVisualIdx, overVisualIdx, rowHeight } = drag;
+    if (overVisualIdx >= fromVisualIdx) {
+      if (visualIdx > fromVisualIdx && visualIdx <= overVisualIdx) return -rowHeight;
+    } else {
+      if (visualIdx < fromVisualIdx && visualIdx >= overVisualIdx) return rowHeight;
+    }
+    return 0;
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-col gap-1 mt-2 relative"
+      style={{ touchAction: "none" }}
+    >
+      {visual.map((l, visualIdx) => {
+        const isDragging = drag?.id === l.id;
+        const offset = isDragging ? drag.deltaY : rowOffset(visualIdx, l.id);
+        return (
+          <DraggableLayerRow
+            key={l.id}
+            layer={l}
+            active={l.id === activeId}
+            onActivate={() => setActive(l.id)}
+            onVisibility={() => onLayerVisibility(l.id)}
+            onRename={(name) => onLayerRename(l.id, name)}
+            thumb={getThumbCanvas(l.id)}
+            isDragging={isDragging}
+            translateY={offset}
+            registerRef={(el) => {
+              if (el) rowRefs.current.set(l.id, el);
+              else rowRefs.current.delete(l.id);
+            }}
+            onDragPointerDown={(e) => {
+              // Don't start drag if interacting with controls.
+              const t = e.target as HTMLElement;
+              if (t.closest("button, [contenteditable]")) return;
+              const startY = e.clientY;
+              const initialId = l.id;
+              const initialFrom = visualIdx;
+              // Use a movement-threshold gate via a one-shot move listener
+              const onMoveStart = (ev: PointerEvent) => {
+                if (ev.pointerId !== e.pointerId) return;
+                if (Math.abs(ev.clientY - startY) >= DRAG_THRESHOLD) {
+                  window.removeEventListener("pointermove", onMoveStart);
+                  window.removeEventListener("pointerup", onUpEarly);
+                  // Begin drag now
+                  beginIfNeeded(ev, initialId, initialFrom, startY);
+                  // immediately update so the row jumps under cursor
+                  updateOver(ev.clientY);
+                }
+              };
+              const onUpEarly = (ev: PointerEvent) => {
+                if (ev.pointerId !== e.pointerId) return;
+                window.removeEventListener("pointermove", onMoveStart);
+                window.removeEventListener("pointerup", onUpEarly);
+              };
+              window.addEventListener("pointermove", onMoveStart);
+              window.addEventListener("pointerup", onUpEarly);
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function DraggableLayerRow({
+  layer,
+  active,
+  onActivate,
+  onVisibility,
+  onRename,
+  thumb,
+  isDragging,
+  translateY,
+  registerRef,
+  onDragPointerDown,
+}: {
+  layer: LayerState;
+  active: boolean;
+  onActivate: () => void;
+  onVisibility: () => void;
+  onRename: (name: string) => void;
+  thumb: HTMLCanvasElement | undefined;
+  isDragging: boolean;
+  translateY: number;
+  registerRef: (el: HTMLDivElement | null) => void;
+  onDragPointerDown: (e: React.PointerEvent) => void;
+}) {
+  const thumbHostRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const host = thumbHostRef.current;
+    if (!host) return;
+    host.innerHTML = "";
+    if (thumb) {
+      thumb.style.width = "100%";
+      thumb.style.height = "100%";
+      thumb.style.display = "block";
+      thumb.style.objectFit = "contain";
+      host.appendChild(thumb);
+    }
+  }, [thumb, layer.id]);
+
+  return (
+    <div
+      ref={registerRef}
+      onClick={onActivate}
+      onPointerDown={onDragPointerDown}
+      className={`grid items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer border transition-[border-color,background,box-shadow] ${
+        active
+          ? "bg-[color:var(--bg)] border-[color:var(--accent-dim)]"
+          : "bg-[color:var(--panel-2)] border-transparent hover:border-[color:var(--line)]"
+      } ${isDragging ? "shadow-soft z-10 opacity-95 ring-1 ring-[color:var(--accent-dim)]" : ""}`}
+      style={{
+        gridTemplateColumns: "16px 22px 36px 1fr auto",
+        transform: translateY ? `translateY(${translateY}px)` : undefined,
+        transition: isDragging ? "none" : "transform 160ms cubic-bezier(.5,.1,.2,1)",
+        userSelect: "none",
+      }}
+    >
+      {/* drag handle */}
+      <span
+        aria-hidden
+        className="text-[color:var(--ink-4)] flex flex-col items-center gap-[2px] -ml-1"
+      >
+        <span className="w-3 h-[1px] bg-current rounded-full" />
+        <span className="w-3 h-[1px] bg-current rounded-full" />
+        <span className="w-3 h-[1px] bg-current rounded-full" />
+      </span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onVisibility();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className={`w-5 h-5 grid place-items-center bg-transparent border-0 cursor-pointer ${
+          layer.visible ? "text-[color:var(--ink-3)]" : "text-[color:var(--ink-4)] opacity-55"
+        } hover:text-[color:var(--ink)]`}
+      >
+        {layer.visible ? ICONS.eye : ICONS.eyeOff}
+      </button>
+      <div
+        ref={thumbHostRef}
+        className="checker-sm w-9 h-7 rounded-[4px] border border-[color:var(--line)] overflow-hidden flex-shrink-0"
+      />
+      <div
+        contentEditable="plaintext-only"
+        spellCheck={false}
+        suppressContentEditableWarning
+        className="text-[12.5px] text-[color:var(--ink)] outline-none border border-transparent px-1 rounded-sm min-w-0 overflow-hidden whitespace-nowrap text-ellipsis focus:bg-[color:var(--panel)] focus:border-[color:var(--accent-dim)]"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onBlur={(e) => onRename(e.currentTarget.textContent || "")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLDivElement).blur();
+          }
+        }}
+      >
+        {layer.name}
+      </div>
+      <div className="font-mono text-[10px] text-[color:var(--ink-3)] w-7 text-right">
+        {Math.round(layer.opacity * 100)}
+      </div>
+    </div>
   );
 }

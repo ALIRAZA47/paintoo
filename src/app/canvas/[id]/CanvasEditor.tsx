@@ -1563,6 +1563,39 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
     [mountLayers, pushHistory],
   );
 
+  /** Reorder layers by id list. The arg is the new array of layer ids in
+      desired order. Skips no-ops and records a single history entry. */
+  const onLayerReorder = useCallback(
+    (newIds: string[]) => {
+      const cur = layersRef.current;
+      const beforeIds = cur.map((l) => l.id);
+      if (newIds.length !== beforeIds.length) return;
+      if (beforeIds.every((id, i) => id === newIds[i])) return;
+      const byId = new Map(cur.map((l) => [l.id, l]));
+      const next = newIds.map((id) => byId.get(id)!).filter(Boolean);
+      if (next.length !== cur.length) return;
+      layersRef.current = next;
+      mountLayers();
+      setLayerVersion((v) => v + 1);
+      pushHistory(
+        "reorder layer",
+        () => {
+          const m = new Map(layersRef.current.map((l) => [l.id, l]));
+          layersRef.current = beforeIds.map((id) => m.get(id)!).filter(Boolean);
+          mountLayers();
+          setLayerVersion((v) => v + 1);
+        },
+        () => {
+          const m = new Map(layersRef.current.map((l) => [l.id, l]));
+          layersRef.current = newIds.map((id) => m.get(id)!).filter(Boolean);
+          mountLayers();
+          setLayerVersion((v) => v + 1);
+        },
+      );
+    },
+    [mountLayers, pushHistory],
+  );
+
   const onLayerVisibility = useCallback(
     (id: string) => {
       const l = layersRef.current.find((x) => x.id === id);
@@ -1851,6 +1884,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
     onLayerAdd,
     onLayerDuplicate,
     onLayerMove,
+    onLayerReorder,
     onLayerDelete,
     collapsed: rightCollapsed,
     setCollapsed: setRightCollapsed,
