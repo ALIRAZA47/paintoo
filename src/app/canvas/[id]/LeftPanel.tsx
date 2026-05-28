@@ -12,6 +12,9 @@ const TOOLS: Array<{ id: ToolId; label: string; key: string; icon: keyof typeof 
   { id: "line", label: "Line", key: "L", icon: "line" },
   { id: "rect", label: "Rectangle", key: "R", icon: "rect" },
   { id: "ellipse", label: "Ellipse", key: "O", icon: "ellipse" },
+  { id: "halfcircle", label: "Half-circle", key: "D", icon: "halfcircle" },
+  { id: "triangle", label: "Triangle", key: "U", icon: "triangle" },
+  { id: "arrow", label: "Arrow", key: "V", icon: "arrow" },
   { id: "poly", label: "Polygon", key: "Y", icon: "poly" },
   { id: "text", label: "Text", key: "T", icon: "text" },
   { id: "hand", label: "Hand (pan)", key: "H", icon: "hand" },
@@ -19,9 +22,12 @@ const TOOLS: Array<{ id: ToolId; label: string; key: string; icon: keyof typeof 
 
 const BRUSH_KINDS: Array<{ id: BrushKind; label: string }> = [
   { id: "pencil", label: "pencil" },
+  { id: "graphite", label: "graphite" },
+  { id: "ink", label: "ink" },
   { id: "marker", label: "marker" },
   { id: "watercolor", label: "watercolor" },
   { id: "spray", label: "spray" },
+  { id: "charcoal", label: "charcoal" },
   { id: "calligraphy", label: "calligraphy" },
 ];
 
@@ -136,7 +142,14 @@ export function LeftPanel(props: LeftPanelProps) {
   }
 
   const showBrush = tool === "brush" || tool === "eraser";
-  const showShape = tool === "line" || tool === "rect" || tool === "ellipse" || tool === "poly";
+  const showShape =
+    tool === "line" ||
+    tool === "rect" ||
+    tool === "ellipse" ||
+    tool === "halfcircle" ||
+    tool === "triangle" ||
+    tool === "arrow" ||
+    tool === "poly";
   const showText = tool === "text";
 
   return (
@@ -206,12 +219,19 @@ function LeftPanelSections(props: LeftPanelProps) {
     setTextBold,
   } = props;
   const showBrush = tool === "brush" || tool === "eraser";
-  const showShape = tool === "line" || tool === "rect" || tool === "ellipse" || tool === "poly";
+  const showShape =
+    tool === "line" ||
+    tool === "rect" ||
+    tool === "ellipse" ||
+    tool === "halfcircle" ||
+    tool === "triangle" ||
+    tool === "arrow" ||
+    tool === "poly";
   const showText = tool === "text";
 
   return (
     <>
-      <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+      <div data-tour="tools-section" className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
         <div className="flex justify-between items-center mb-3">
           <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
             Tools
@@ -243,7 +263,7 @@ function LeftPanelSections(props: LeftPanelProps) {
       </div>
 
       {showBrush && (
-        <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+        <div data-tour="brush-section" className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
           <div className="flex justify-between items-center mb-3">
             <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
               Brush

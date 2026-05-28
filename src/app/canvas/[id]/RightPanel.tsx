@@ -134,7 +134,7 @@ function RightPanelSections(props: RightPanelProps) {
   return (
     <>
       {showColor && (
-      <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+      <div data-tour="color-section" className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
         <div className="flex justify-between items-center mb-3">
           <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
             Color
@@ -151,7 +151,7 @@ function RightPanelSections(props: RightPanelProps) {
       )}
 
       {showLayers && (
-      <div className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
+      <div data-tour="layers-section" className="border-b border-[color:var(--line-soft)] px-4 py-3.5">
         <div className="flex justify-between items-center mb-3">
           <div className="font-serif italic text-[17px] text-[color:var(--ink)] tracking-tight">
             Layers

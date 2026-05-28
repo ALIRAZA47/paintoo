@@ -168,7 +168,15 @@ export function floodFill(
 }
 
 /* ── brush kinds ─────────────────────────────────────────────────────── */
-export type BrushKind = "pencil" | "marker" | "watercolor" | "spray" | "calligraphy";
+export type BrushKind =
+  | "pencil"
+  | "graphite"
+  | "marker"
+  | "ink"
+  | "watercolor"
+  | "spray"
+  | "charcoal"
+  | "calligraphy";
 
 export type BrushParams = {
   size: number;
@@ -236,12 +244,63 @@ export function drawBrushSegment(
       }
       break;
     }
+    case "graphite": {
+      // Heavy-grain graphite pencil: no underlying solid stroke, just dense
+      // angular dashes scattered along the path. Mimics the way a pencil
+      // lays down graphite on paper — the paper shows through.
+      const dx = b.x - a.x,
+        dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.ceil(dist / 1.4));
+      const angle = dist > 0.01 ? Math.atan2(dy, dx) : 0;
+      const baseAlpha = alpha * (0.32 + 0.55 * pressure);
+      const widthFactor = 0.45 + 0.55 * pressure;
+      ctx.fillStyle = hex;
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        const cx = a.x + dx * t;
+        const cy = a.y + dy * t;
+        const dotCount = Math.max(2, Math.floor(baseSize * 0.55));
+        for (let k = 0; k < dotCount; k++) {
+          // Gaussian-ish radial offset weighted toward center, with the
+          // long axis aligned to the stroke direction.
+          const r = Math.pow(Math.random(), 1.4) * baseSize * 0.55 * widthFactor;
+          const oa = Math.random() * Math.PI * 2;
+          const px = cx + Math.cos(oa) * r;
+          const py = cy + Math.sin(oa) * r;
+          ctx.globalAlpha = baseAlpha * (0.18 + Math.random() * 0.55);
+          // Tiny dashes rotated along the stroke for the scratchy look.
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(angle + (Math.random() - 0.5) * 0.7);
+          const w = 0.8 + Math.random() * 1.6;
+          const h = 0.35 + Math.random() * 0.55;
+          ctx.fillRect(-w / 2, -h / 2, w, h);
+          ctx.restore();
+        }
+      }
+      break;
+    }
     case "marker": {
       ctx.globalAlpha = alpha * 0.55;
       ctx.strokeStyle = hex;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = baseSize;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      break;
+    }
+    case "ink": {
+      // Sharp pen: full alpha (no buildup on overlap), thin width modulated
+      // by pressure. Good for line work and contour drawing.
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = hex;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(0.4, baseSize * (0.22 + 0.78 * pressure));
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -288,6 +347,35 @@ export function drawBrushSegment(
           const py = y + Math.sin(ang) * rad;
           ctx.globalAlpha = alpha * 0.18;
           ctx.fillRect(px, py, 1, 1);
+        }
+      }
+      break;
+    }
+    case "charcoal": {
+      // Soft dusty charcoal: round particles with varied radii, low per-stamp
+      // alpha so overlapping strokes build up like real charcoal on paper.
+      const dx = b.x - a.x,
+        dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.ceil(dist / 1.2));
+      const baseAlpha = alpha * (0.18 + 0.55 * pressure);
+      ctx.fillStyle = hex;
+      for (let i = 0; i <= steps; i++) {
+        const t = steps === 0 ? 0 : i / steps;
+        const x = a.x + dx * t;
+        const y = a.y + dy * t;
+        const dotCount = Math.max(3, Math.floor(baseSize * 0.55));
+        for (let k = 0; k < dotCount; k++) {
+          // Wider spread than graphite, more "dusty"
+          const rad = Math.pow(Math.random(), 0.65) * baseSize * 0.6;
+          const oa = Math.random() * Math.PI * 2;
+          const px = x + Math.cos(oa) * rad;
+          const py = y + Math.sin(oa) * rad;
+          ctx.globalAlpha = baseAlpha * (0.18 + Math.random() * 0.55);
+          const r = 0.5 + Math.random() * 1.8;
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
       break;

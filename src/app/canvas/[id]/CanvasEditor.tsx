@@ -36,6 +36,7 @@ import {
   MoreSheet,
   type SheetKind,
 } from "./MobileShell";
+import { Tour, desktopTour, mobileTour } from "./Tour";
 
 /* ───────────────────────────────────────────────────────── types ─── */
 
@@ -47,9 +48,26 @@ export type ToolId =
   | "line"
   | "rect"
   | "ellipse"
+  | "halfcircle"
+  | "triangle"
+  | "arrow"
   | "poly"
   | "text"
   | "hand";
+
+/** Shape tools that follow the simple click-drag-release flow (start point
+ *  recorded on down, preview while moving, commit on up). */
+const DRAG_SHAPES: ReadonlySet<ToolId> = new Set([
+  "line",
+  "rect",
+  "ellipse",
+  "halfcircle",
+  "triangle",
+  "arrow",
+]);
+function isDragShape(t: ToolId): boolean {
+  return DRAG_SHAPES.has(t);
+}
 
 export type LayerState = {
   id: string;
@@ -164,6 +182,13 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
   useEffect(() => {
     if (!isMobile) setSheet(null);
   }, [isMobile]);
+
+  const [tourOpen, setTourOpen] = useState(false);
+  function startTour() {
+    setModal(null);
+    setSheet(null);
+    setTimeout(() => setTourOpen(true), 100);
+  }
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [fileName, setFileName] = useState(design.name);
@@ -582,6 +607,88 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
   const shapeStartRef = useRef<Point | null>(null);
   const polyPointsRef = useRef<Point[]>([]);
 
+  /** Draw a shape into the given 2D context. Shared by the preview overlay
+   *  and the final commit so the two always render identically. */
+  const drawShapeTo = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      t: ToolId,
+      start: Point,
+      end: Point,
+      fill: boolean,
+      stroke: boolean,
+      sw: number,
+    ) => {
+      const x0 = Math.min(start.x, end.x);
+      const x1 = Math.max(start.x, end.x);
+      const y0 = Math.min(start.y, end.y);
+      const y1 = Math.max(start.y, end.y);
+      if (t === "line") {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      } else if (t === "rect") {
+        const w = x1 - x0;
+        const h = y1 - y0;
+        if (fill) ctx.fillRect(x0, y0, w, h);
+        if (stroke) ctx.strokeRect(x0, y0, w, h);
+      } else if (t === "ellipse") {
+        const cx = (x0 + x1) / 2,
+          cy = (y0 + y1) / 2;
+        const rx = (x1 - x0) / 2,
+          ry = (y1 - y0) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        if (fill) ctx.fill();
+        if (stroke) ctx.stroke();
+      } else if (t === "halfcircle") {
+        const cx = (x0 + x1) / 2;
+        const rx = (x1 - x0) / 2;
+        const ry = y1 - y0;
+        // D-shape: flat edge at bottom, arc bulges upward.
+        ctx.beginPath();
+        ctx.ellipse(cx, y1, rx, ry, 0, 0, Math.PI, true);
+        ctx.closePath();
+        if (fill) ctx.fill();
+        if (stroke) ctx.stroke();
+      } else if (t === "triangle") {
+        ctx.beginPath();
+        ctx.moveTo((x0 + x1) / 2, y0);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x0, y1);
+        ctx.closePath();
+        if (fill) ctx.fill();
+        if (stroke) ctx.stroke();
+      } else if (t === "arrow") {
+        const dx = end.x - start.x,
+          dy = end.y - start.y;
+        const len = Math.hypot(dx, dy);
+        if (len < 0.5) return;
+        const angle = Math.atan2(dy, dx);
+        const headLen = Math.min(len * 0.3, 30 + sw * 2);
+        const headHalf = headLen * 0.45;
+        const baseX = end.x - headLen * Math.cos(angle);
+        const baseY = end.y - headLen * Math.sin(angle);
+        const perpX = -Math.sin(angle);
+        const perpY = Math.cos(angle);
+        // Shaft (stop just shy of the head so the head sits flat).
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(baseX, baseY);
+        ctx.stroke();
+        // Filled arrowhead.
+        ctx.beginPath();
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(baseX + perpX * headHalf, baseY + perpY * headHalf);
+        ctx.lineTo(baseX - perpX * headHalf, baseY - perpY * headHalf);
+        ctx.closePath();
+        ctx.fill();
+      }
+    },
+    [],
+  );
+
   const renderShapePreview = useCallback(
     (end: Point | null) => {
       const pv = previewRef.current;
@@ -601,27 +708,8 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
       pctx.lineJoin = "round";
       pctx.lineCap = "round";
 
-      if (t === "line" && start && end) {
-        pctx.beginPath();
-        pctx.moveTo(start.x, start.y);
-        pctx.lineTo(end.x, end.y);
-        pctx.stroke();
-      } else if (t === "rect" && start && end) {
-        const x = Math.min(start.x, end.x);
-        const y = Math.min(start.y, end.y);
-        const w = Math.abs(end.x - start.x);
-        const h = Math.abs(end.y - start.y);
-        if (fill) pctx.fillRect(x, y, w, h);
-        if (stroke) pctx.strokeRect(x, y, w, h);
-      } else if (t === "ellipse" && start && end) {
-        const cx = (start.x + end.x) / 2,
-          cy = (start.y + end.y) / 2;
-        const rx = Math.abs(end.x - start.x) / 2,
-          ry = Math.abs(end.y - start.y) / 2;
-        pctx.beginPath();
-        pctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        if (fill) pctx.fill();
-        if (stroke) pctx.stroke();
+      if (start && end && isDragShape(t)) {
+        drawShapeTo(pctx, t, start, end, fill, stroke, sw);
       } else if (t === "poly") {
         const pts = polyPointsRef.current;
         if (pts.length === 0) return;
@@ -639,7 +727,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         });
       }
     },
-    [currentRgb],
+    [currentRgb, drawShapeTo],
   );
 
   const commitShape = useCallback(
@@ -660,35 +748,14 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         ctx.lineWidth = sw;
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
-        if (t === "line") {
-          ctx.beginPath();
-          ctx.moveTo(start.x, start.y);
-          ctx.lineTo(end.x, end.y);
-          ctx.stroke();
-        } else if (t === "rect") {
-          const x = Math.min(start.x, end.x),
-            y = Math.min(start.y, end.y);
-          const w = Math.abs(end.x - start.x),
-            h = Math.abs(end.y - start.y);
-          if (fill) ctx.fillRect(x, y, w, h);
-          if (stroke) ctx.strokeRect(x, y, w, h);
-        } else if (t === "ellipse") {
-          const cx = (start.x + end.x) / 2,
-            cy = (start.y + end.y) / 2;
-          const rx = Math.abs(end.x - start.x) / 2,
-            ry = Math.abs(end.y - start.y) / 2;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-          if (fill) ctx.fill();
-          if (stroke) ctx.stroke();
-        }
+        drawShapeTo(ctx, t, start, end, fill, stroke, sw);
         ctx.restore();
       });
       shapeStartRef.current = null;
       const pv = previewRef.current!;
       pv.getContext("2d")!.clearRect(0, 0, pv.width, pv.height);
     },
-    [commitEdit, currentRgb],
+    [commitEdit, currentRgb, drawShapeTo],
   );
 
   const commitPolygon = useCallback(() => {
@@ -977,6 +1044,9 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         case "line":
         case "rect":
         case "ellipse":
+        case "halfcircle":
+        case "triangle":
+        case "arrow":
           shapeStartRef.current = p;
           break;
         case "poly":
@@ -1040,12 +1110,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
       if (drawingRef.current) {
         const pp: Point = { ...p, p: e.pressure > 0 ? e.pressure : 0.5 };
         moveStroke(pp);
-      } else if (
-        (toolRef.current === "line" ||
-          toolRef.current === "rect" ||
-          toolRef.current === "ellipse") &&
-        shapeStartRef.current
-      ) {
+      } else if (isDragShape(toolRef.current) && shapeStartRef.current) {
         renderShapePreview(p);
       } else if (toolRef.current === "poly" && polyPointsRef.current.length > 0) {
         renderShapePreview(p);
@@ -1065,12 +1130,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         endStroke();
         return;
       }
-      if (
-        (toolRef.current === "line" ||
-          toolRef.current === "rect" ||
-          toolRef.current === "ellipse") &&
-        shapeStartRef.current
-      ) {
+      if (isDragShape(toolRef.current) && shapeStartRef.current) {
         const p = eventToCanvas(e);
         commitShape(p);
       }
@@ -1230,6 +1290,18 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
           setToolWithReset("brush");
           setBrushKindState("calligraphy");
           break;
+        case "x":
+          setToolWithReset("brush");
+          setBrushKindState("graphite");
+          break;
+        case "k":
+          setToolWithReset("brush");
+          setBrushKindState("charcoal");
+          break;
+        case "n":
+          setToolWithReset("brush");
+          setBrushKindState("ink");
+          break;
         case "g":
           setToolWithReset("bucket");
           break;
@@ -1244,6 +1316,15 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
           break;
         case "o":
           setToolWithReset("ellipse");
+          break;
+        case "d":
+          setToolWithReset("halfcircle");
+          break;
+        case "u":
+          setToolWithReset("triangle");
+          break;
+        case "v":
+          setToolWithReset("arrow");
           break;
         case "y":
           setToolWithReset("poly");
@@ -2065,6 +2146,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
         close={() => setModal(null)}
         onClear={clearActiveLayer}
         onExport={exportImage}
+        onStartTour={startTour}
         onWelcomeClose={(skip) => {
           if (skip) {
             try {
@@ -2074,6 +2156,16 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
           setModal(null);
         }}
       />
+
+      {tourOpen && (
+        <Tour
+          isMobile={isMobile}
+          steps={
+            isMobile ? mobileTour((s) => setSheet(s)) : desktopTour()
+          }
+          onClose={() => setTourOpen(false)}
+        />
+      )}
 
       {/* mobile bottom sheets */}
       {isMobile && (
@@ -2111,6 +2203,7 @@ export default function CanvasEditor({ design }: { design: DesignInit }) {
             onHelp={() => setModal("help")}
             onTheme={toggleTheme}
             onHome={() => router.push("/")}
+            onStartTour={startTour}
           />
         </>
       )}

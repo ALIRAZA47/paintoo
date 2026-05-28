@@ -8,6 +8,7 @@ export function Modals({
   onClear,
   onExport,
   onWelcomeClose,
+  onStartTour,
 }: {
   modal: "new" | "export" | "clear" | "welcome" | "help" | null;
   close: () => void;
@@ -19,6 +20,7 @@ export function Modals({
     quality: number,
   ) => void;
   onWelcomeClose: (skip: boolean) => void;
+  onStartTour: () => void;
 }) {
   return (
     <>
@@ -40,7 +42,11 @@ export function Modals({
       <ExportModal open={modal === "export"} onClose={close} onExport={onExport} />
 
       {/* welcome */}
-      <WelcomeModal open={modal === "welcome"} onClose={onWelcomeClose} />
+      <WelcomeModal
+        open={modal === "welcome"}
+        onClose={onWelcomeClose}
+        onStartTour={onStartTour}
+      />
 
       {/* help */}
       <Scrim open={modal === "help"} onClose={close}>
@@ -71,7 +77,15 @@ export function Modals({
             ["Toggle panels", "⌘\\"],
           ]}
         />
-        <div className="flex gap-2 justify-end mt-4">
+        <div className="flex gap-2 justify-end mt-4 flex-wrap">
+          <GhostBtn
+            onClick={() => {
+              close();
+              onStartTour();
+            }}
+          >
+            Replay tour
+          </GhostBtn>
           <PrimaryBtn onClick={close}>Close</PrimaryBtn>
         </div>
       </Scrim>
@@ -172,40 +186,36 @@ function ExportModal({
 function WelcomeModal({
   open,
   onClose,
+  onStartTour,
 }: {
   open: boolean;
   onClose: (skip: boolean) => void;
+  onStartTour: () => void;
 }) {
-  const [skip, setSkip] = useState(false);
+  const [skip, setSkip] = useState(true);
   return (
     <Scrim open={open} onClose={() => onClose(skip)}>
       <Heading>
         welcome to paintoo<span className="text-[color:var(--accent)]">.</span>
       </Heading>
       <p className="text-[color:var(--ink-2)] my-2 mb-4 text-[13px] leading-relaxed">
-        A small studio for marks. Pick a brush, pick a color, leave a trace. Stylus pressure is
-        supported where your device offers it.
+        A small studio for marks. New here? Take a 30-second tour to learn where everything is —
+        otherwise pick a brush and start drawing.
       </p>
-      <KbdList
-        items={[
-          ["Brush", "B"],
-          ["Eraser", "E"],
-          ["Eyedropper", "I"],
-          ["Bucket fill", "G"],
-          ["Hand / pan", "H or Space"],
-          ["Text", "T"],
-          ["Brush size", "[  ]"],
-          ["Undo / Redo", "⌘Z / ⌘⇧Z"],
-          ["Save", "⌘S"],
-          ["Fit canvas", "0"],
-        ]}
-      />
       <label className="pt-check">
         <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} />{" "}
         Don't show this again
       </label>
-      <div className="flex gap-2 justify-end mt-4">
-        <PrimaryBtn onClick={() => onClose(skip)}>Start drawing</PrimaryBtn>
+      <div className="flex gap-2 justify-end mt-4 flex-wrap">
+        <GhostBtn onClick={() => onClose(skip)}>Start drawing</GhostBtn>
+        <PrimaryBtn
+          onClick={() => {
+            onClose(skip);
+            onStartTour();
+          }}
+        >
+          Take the tour
+        </PrimaryBtn>
       </div>
     </Scrim>
   );

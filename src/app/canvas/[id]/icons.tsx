@@ -56,6 +56,22 @@ export const ICONS: Record<string, JSX.Element> = {
       <polygon points="12 3 22 10 18 21 6 21 2 10" />
     </svg>
   ),
+  halfcircle: (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...stroke}>
+      <path d="M3 19 A 9 9 0 0 1 21 19 L 3 19 Z" />
+    </svg>
+  ),
+  triangle: (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...stroke}>
+      <polygon points="12 4 21 20 3 20" />
+    </svg>
+  ),
+  arrow: (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...stroke}>
+      <line x1="4" y1="12" x2="18" y2="12" />
+      <polyline points="13 6 19 12 13 18" />
+    </svg>
+  ),
   text: (
     <svg width="18" height="18" viewBox="0 0 24 24" {...stroke}>
       <polyline points="4 7 4 4 20 4 20 7" />

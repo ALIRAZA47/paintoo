@@ -145,6 +145,7 @@ export function TopBar({
       <button
         onClick={onSave}
         disabled={saving}
+        data-tour="save"
         className="bg-[color:var(--accent)] hover:bg-[color:var(--accent-2)] text-white font-medium text-[12.5px] py-1.5 px-3 rounded-[7px] transition-colors disabled:opacity-50"
         data-tip="Save (⌘S)"
       >

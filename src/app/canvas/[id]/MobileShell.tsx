@@ -94,6 +94,7 @@ export function MobileTopBar({
       <button
         onClick={onSave}
         disabled={saving}
+        data-tour="save"
         className="bg-[color:var(--accent)] active:bg-[color:var(--accent-2)] text-white font-medium text-[12.5px] h-9 px-3 rounded-lg disabled:opacity-50"
       >
         {saving ? "…" : "save"}
@@ -101,6 +102,7 @@ export function MobileTopBar({
       <button
         onClick={onMore}
         aria-label="More options"
+        data-tour="m-more"
         className="w-10 h-10 rounded-lg grid place-items-center text-[color:var(--ink-2)] active:bg-[color:var(--panel-2)]"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" {...sv}>
@@ -193,6 +195,7 @@ export function MobileActionBar({
         return (
           <button
             key={it.id}
+            data-tour={`m-${it.id}`}
             onClick={() => setSheet(active ? null : it.id)}
             className={`flex-1 grid place-items-center px-2 py-2 transition-colors ${
               active
@@ -289,6 +292,7 @@ export function MoreSheet({
   onHelp,
   onTheme,
   onHome,
+  onStartTour,
 }: {
   open: boolean;
   onClose: () => void;
@@ -298,6 +302,7 @@ export function MoreSheet({
   onHelp: () => void;
   onTheme: () => void;
   onHome: () => void;
+  onStartTour: () => void;
 }) {
   const items = [
     {
@@ -356,6 +361,18 @@ export function MoreSheet({
       onClick: () => {
         onClose();
         onHelp();
+      },
+    },
+    {
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...sv}>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+      ),
+      label: "Replay tour",
+      onClick: () => {
+        onClose();
+        onStartTour();
       },
     },
     {
